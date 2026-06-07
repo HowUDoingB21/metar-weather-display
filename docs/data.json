@@ -1,10 +1,10 @@
 {
-  "temperature": null,
-  "humidity": null,
-  "rain_probability": 0,
-  "metar_wdir": null,
-  "metar_wspd": null,
-  "updated_at": "--:--",
-  "updated_epoch": 0,
-  "radar_ts": null
+  "temperature": 20.6,
+  "humidity": 81,
+  "rain_probability": 25,
+  "metar_wdir": 100,
+  "metar_wspd": 5,
+  "updated_at": "19:55",
+  "updated_epoch": 1780797316,
+  "radar_ts": 1780797000
 }
