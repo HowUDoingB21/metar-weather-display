@@ -21,14 +21,14 @@ LAT          = 20.635617
 LON          = -103.405235
 TIMEZONE     = "America/Mexico_City"
 
-RADAR_ZOOM   = 10       # zoom 10 → ~143 m/px; CROP_W×CROP_H covers ≈18 km radius
+RADAR_ZOOM   = 11       # zoom 11 → ~71 m/px; CROP_W×CROP_H covers ≈12 km × 12 km
 TILE_RADIUS  = 1        # 3×3 tile grid composite (768×768 px)
 
-CROP_W       = 252      # px to crop before scaling — ≈36 km at zoom 10 (radius ~18 km)
-CROP_H       = 230      # px to crop before scaling — ≈33 km
+CROP_W       = 168      # px to crop before scaling — ≈12 km at zoom 11
+CROP_H       = 168      # px to crop before scaling — ≈12 km
 
 OUTPUT_W     = 220      # final JPEG width  (matches ESP32 radar panel)
-OUTPUT_H     = 200      # final JPEG height
+OUTPUT_H     = 220      # final JPEG height (fills full 220×220 radar panel)
 
 OUTPUT_DIR   = "docs"
 BASEMAP_REFRESH_DAYS = 30
@@ -62,8 +62,8 @@ def lat_lon_to_pixel_in_composite(lat, lon, tile_x0, tile_y0, z):
 
 # ── Tile fetchers ──────────────────────────────────────────────────────────────
 def fetch_carto_tile(z, x, y):
-    """CartoDB Dark Matter (no labels) — dark background, no road text."""
-    url = f"https://a.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png"
+    """CartoDB Positron (no labels) — light background, no road or city text."""
+    url = f"https://a.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png"
     r = requests.get(url, headers=HEADERS, timeout=15)
     r.raise_for_status()
     return Image.open(BytesIO(r.content)).convert("RGBA")
@@ -136,7 +136,7 @@ def get_or_build_basemap(basemap_path, cx, cy):
     if os.path.exists(basemap_path):
         age = time.time() - os.path.getmtime(basemap_path)
     if age > BASEMAP_REFRESH_DAYS * 86400:
-        print("Fetching CartoDB base map tiles (dark, no labels)...")
+        print("Fetching CartoDB base map tiles (light, no labels)...")
         canvas = build_tile_composite(fetch_carto_tile, RADAR_ZOOM, cx, cy, TILE_RADIUS)
         canvas.save(basemap_path, "PNG")
         print(f"Base map saved ({os.path.getsize(basemap_path) // 1024} KB)")
@@ -294,7 +294,7 @@ def main():
     now = datetime.now(tz)
 
     cx, cy = lat_lon_to_tile(LAT, LON, RADAR_ZOOM)
-    print(f"Center tile ({cx},{cy}) zoom={RADAR_ZOOM}  (~18 km radius view)")
+    print(f"Center tile ({cx},{cy}) zoom={RADAR_ZOOM}  (~12 km × 12 km view)")
 
     # ── Base map ──────────────────────────────────────────────────────────────
     basemap_path = os.path.join(OUTPUT_DIR, f"basemap_z{RADAR_ZOOM}.png")

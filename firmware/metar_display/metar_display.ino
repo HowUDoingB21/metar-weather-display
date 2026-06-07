@@ -34,19 +34,19 @@
 #define INFO_X     RADAR_W        // 220
 #define INFO_W     (SCREEN_W - RADAR_W) // 100
 
-// Play button (bottom of right panel)
-#define BTN_X      (INFO_X + 3)   // 223
-#define BTN_Y      (RADAR_Y + 132) // 152
-#define BTN_W      (INFO_W - 6)    // 94
+// Play button (pinned to bottom of right panel)
+#define BTN_X      (INFO_X + 3)             // 223
 #define BTN_H      34
+#define BTN_Y      (SCREEN_H - BTN_H - 4)  // 202
+#define BTN_W      (INFO_W - 6)             // 94
 
 // ── Colours (RGB565) ──────────────────────────────────────────────────────────
 #define C_BAR_BG    0x000D
 #define C_DIVIDER   0x2945
 #define C_LABEL     0x5DDF
 #define C_SUBTLE    0x4208
-#define C_BTN_BG    0x1082
-#define C_BTN_HL    0x2965
+#define C_BTN_BG    0x0841   // dark navy (idle)
+#define C_BTN_HL    0x1CFD   // bright sky-blue (pressed)
 #define C_BTN_BDR   0x4A49
 
 // ── Globals ───────────────────────────────────────────────────────────────────
@@ -155,40 +155,37 @@ void drawInfoPanel(float temp, int hum, int rain) {
 
     int x = INFO_X + 6;
 
-    // ── Temperature ────────────────────────────────────────
-    tft.setTextSize(1); tft.setTextColor(C_LABEL,    TFT_BLACK);
-    tft.setCursor(x, RADAR_Y + 6);   tft.print("TEMP");
+    // Temperature
+    tft.setTextSize(1); tft.setTextColor(C_LABEL, TFT_BLACK);
+    tft.setCursor(x, RADAR_Y + 8);   tft.print("TEMP");
+    tft.setTextSize(2); tft.setTextColor(TFT_WHITE, TFT_BLACK);
+    tft.setCursor(x, RADAR_Y + 20);  tft.printf("%.0f\xB0""C", temp);
 
-    tft.setTextSize(2); tft.setTextColor(TFT_WHITE,  TFT_BLACK);
-    tft.setCursor(x, RADAR_Y + 17);  tft.printf("%.0f\xB0""C", temp);
+    tft.drawFastHLine(INFO_X + 4, RADAR_Y + 48, INFO_W - 8, C_DIVIDER);
 
-    tft.drawFastHLine(INFO_X + 4, RADAR_Y + 40, INFO_W - 8, C_DIVIDER);
+    // Humidity
+    tft.setTextSize(1); tft.setTextColor(C_LABEL, TFT_BLACK);
+    tft.setCursor(x, RADAR_Y + 54);  tft.print("HUMID");
+    tft.setTextSize(2); tft.setTextColor(TFT_WHITE, TFT_BLACK);
+    tft.setCursor(x, RADAR_Y + 66);  tft.printf("%d%%", hum);
 
-    // ── Humidity ───────────────────────────────────────────
-    tft.setTextSize(1); tft.setTextColor(C_LABEL,    TFT_BLACK);
-    tft.setCursor(x, RADAR_Y + 44);  tft.print("HUMID");
+    tft.drawFastHLine(INFO_X + 4, RADAR_Y + 98, INFO_W - 8, C_DIVIDER);
 
-    tft.setTextSize(2); tft.setTextColor(TFT_WHITE,  TFT_BLACK);
-    tft.setCursor(x, RADAR_Y + 55);  tft.printf("%d%%", hum);
-
-    tft.drawFastHLine(INFO_X + 4, RADAR_Y + 78, INFO_W - 8, C_DIVIDER);
-
-    // ── Rain probability ───────────────────────────────────
-    tft.setTextSize(1); tft.setTextColor(C_LABEL,    TFT_BLACK);
-    tft.setCursor(x, RADAR_Y + 82);  tft.print("RAIN");
-    tft.setCursor(x, RADAR_Y + 93);  tft.print("6h");
-
+    // Rain probability
+    tft.setTextSize(1); tft.setTextColor(C_LABEL, TFT_BLACK);
+    tft.setCursor(x, RADAR_Y + 104); tft.print("RAIN");
+    tft.setCursor(x, RADAR_Y + 115); tft.print("6h");
     uint16_t rc = (rain > 60) ? TFT_RED : (rain > 30) ? TFT_YELLOW : TFT_GREEN;
     tft.setTextSize(2); tft.setTextColor(rc, TFT_BLACK);
-    tft.setCursor(x, RADAR_Y + 106); tft.printf("%d%%", rain);
+    tft.setCursor(x, RADAR_Y + 127); tft.printf("%d%%", rain);
 
-    tft.drawFastHLine(INFO_X + 4, RADAR_Y + 128, INFO_W - 8, C_DIVIDER);
+    tft.drawFastHLine(INFO_X + 4, RADAR_Y + 155, INFO_W - 8, C_DIVIDER);
 
-    // ── Station ────────────────────────────────────────────
-    tft.setTextSize(1); tft.setTextColor(C_SUBTLE,   TFT_BLACK);
-    tft.setCursor(x, RADAR_Y + 132); tft.print("MMGL");   // overwritten by button below
+    // Station label (now has room, not overwritten by button)
+    tft.setTextSize(1); tft.setTextColor(C_SUBTLE, TFT_BLACK);
+    tft.setCursor(x, RADAR_Y + 162); tft.print("MMGL");
 
-    // ── Play button ────────────────────────────────────────
+    // Play button pinned to bottom
     drawPlayButton();
 }
 
@@ -332,7 +329,8 @@ void loop() {
         if (tft.getTouch(&tx, &ty)) {
             if (tx >= BTN_X && tx <= BTN_X + BTN_W &&
                 ty >= BTN_Y && ty <= BTN_Y + BTN_H) {
-                delay(60);  // debounce
+                drawPlayButton(true);  // instant highlight so user sees the press
+                delay(150);            // hold highlight before download starts
                 playAnimation();
             }
         }
