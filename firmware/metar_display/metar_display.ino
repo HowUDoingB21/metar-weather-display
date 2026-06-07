@@ -264,6 +264,8 @@ void setup() {
     timeClient.update();
 
     updateDisplay();
+    lastUpdate    = millis();   // prevent loop() from triggering a second call immediately
+    lastTimeTick  = lastUpdate;
 }
 
 // ── Loop ──────────────────────────────────────────────────────────────────────
@@ -276,7 +278,7 @@ void loop() {
     unsigned long now = millis();
 
     // Full update every UPDATE_INTERVAL_MS (default 5 min)
-    if (lastUpdate == 0 || now - lastUpdate >= UPDATE_INTERVAL_MS) {
+    if (now - lastUpdate >= UPDATE_INTERVAL_MS) {
         lastUpdate = now;
         updateDisplay();
         lastTimeTick = now;
