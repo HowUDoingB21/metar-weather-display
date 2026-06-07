@@ -289,15 +289,11 @@ def main():
     sz = crop_annotate_save(current_frame, cx, cy, radar_out)
     print(f"Radar saved ({sz // 1024} KB)")
 
-    # ── Animation: single "now" frame + forecast chart ─────────────────────────
+    # ── Animation: none — button goes straight to forecast chart ──────────────
     for fname in os.listdir(OUTPUT_DIR):
         if fname.startswith("anim_") and fname.endswith(".jpg"):
             os.remove(os.path.join(OUTPUT_DIR, fname))
-
-    anim_out = os.path.join(OUTPUT_DIR, "anim_00.jpg")
-    sz = crop_annotate_save(current_frame, cx, cy, anim_out, label="now", quality=75)
-    print(f"Animation frame (now): {sz // 1024} KB")
-    anim_count = 1
+    anim_count = 0
 
     # ── Weather data ──────────────────────────────────────────────────────────
     print("Fetching weather + METAR...")
