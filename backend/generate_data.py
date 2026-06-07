@@ -115,7 +115,7 @@ def fetch_open_meteo():
         f"?latitude={LAT}&longitude={LON}"
         f"&current=temperature_2m,relative_humidity_2m"
         f"&hourly=precipitation_probability"
-        f"&timezone={TIMEZONE}&forecast_days=1"
+        f"&timezone={TIMEZONE}&forecast_days=2"
     )
     r = requests.get(url, timeout=10)
     r.raise_for_status()
@@ -214,23 +214,14 @@ def _load_font(size=11):
 
 
 # ── Forecast chart ─────────────────────────────────────────────────────────────
-def generate_forecast_image(hourly, tz):
-    now = datetime.now(tz)
-    current_hour_str = now.strftime("%Y-%m-%dT%H:00")
-
+def generate_forecast_image(hourly, cur_idx):
+    """Build 6-bar forecast chart for hours H+1 … H+6 from cur_idx."""
     times = hourly.get("time", [])
     probs = hourly.get("precipitation_probability", [])
 
-    # Find index of current hour
-    idx = 0
-    for i, t in enumerate(times):
-        if t >= current_hour_str:
-            idx = i
-            break
-
     forecast = []
-    for i in range(1, 7):
-        j = idx + i
+    for k in range(1, 7):
+        j = cur_idx + k
         if j < len(probs):
             try:
                 h = datetime.strptime(times[j], "%Y-%m-%dT%H:%M").strftime("%H:00")
@@ -359,8 +350,22 @@ def main():
 
     current = weather.get("current", {})
     hourly  = weather.get("hourly", {})
+    times   = hourly.get("time", [])
     probs   = hourly.get("precipitation_probability", [])
-    rain_6h = max(probs[:6]) if probs else 0
+
+    # Find index of current hour so rain_6h and the forecast chart agree
+    current_hour_str = now.strftime("%Y-%m-%dT%H:00")
+    cur_idx = 0
+    for i, t in enumerate(times):
+        if t >= current_hour_str:
+            cur_idx = i
+            break
+
+    # Max probability over the next 6 full hours (H+1 … H+6), matches chart bars
+    rain_6h = max(
+        (probs[cur_idx + k] for k in range(1, 7) if cur_idx + k < len(probs)),
+        default=0
+    )
 
     data = {
         "temperature":      current.get("temperature_2m"),
@@ -377,7 +382,7 @@ def main():
         json.dump(data, f, indent=2)
 
     # ── Forecast chart ────────────────────────────────────────────────────────
-    generate_forecast_image(hourly, tz)
+    generate_forecast_image(hourly, cur_idx)
 
     print(
         f"\nDone — Temp: {data['temperature']}°C  "
