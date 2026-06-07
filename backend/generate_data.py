@@ -2,7 +2,10 @@
 """
 Weather data generator for ESP32 METAR display.
 Runs via GitHub Actions every 10 minutes.
-Outputs radar.jpg, anim_NN.jpg, forecast.jpg, and data.json under docs/.
+Outputs radar.jpg, anim_00.jpg, forecast.jpg, and data.json under docs/.
+
+Requires env var:
+  OWM_API_KEY  — OpenWeatherMap API key (free at openweathermap.org)
 """
 import math
 import json
@@ -21,19 +24,19 @@ LAT          = 20.635617
 LON          = -103.405235
 TIMEZONE     = "America/Mexico_City"
 
-RADAR_ZOOM   = 11       # zoom 11 → ~71 m/px; CROP_W×CROP_H covers ≈12 km × 12 km
+OWM_KEY      = os.environ.get("OWM_API_KEY", "")   # set in GitHub Actions secrets
+
+RADAR_ZOOM   = 11       # zoom 11 → ~71 m/px; CROP covers ~12 km × 12 km
 TILE_RADIUS  = 1        # 3×3 tile grid composite (768×768 px)
 
 CROP_W       = 168      # px to crop before scaling — ≈12 km at zoom 11
-CROP_H       = 168      # px to crop before scaling — ≈12 km
+CROP_H       = 168
 
 OUTPUT_W     = 220      # final JPEG width  (matches ESP32 radar panel)
 OUTPUT_H     = 220      # final JPEG height (fills full 220×220 radar panel)
 
 OUTPUT_DIR   = "docs"
 BASEMAP_REFRESH_DAYS = 30
-MAX_PAST_FRAMES   = 3   # how many past radar frames to include in animation
-MAX_TOTAL_FRAMES  = 6   # hard cap on animation frame count
 
 HEADERS = {
     "User-Agent": (
@@ -69,13 +72,15 @@ def fetch_carto_tile(z, x, y):
     return Image.open(BytesIO(r.content)).convert("RGBA")
 
 
-def fetch_radar_tile(radar_path, z, x, y):
-    """RainViewer radar tile — color=4 (Meteored), smooth=1, snow=0."""
-    url = f"https://tilecache.rainviewer.com{radar_path}/256/{z}/{x}/{y}/4/1_0.png"
+def fetch_owm_tile(z, x, y):
+    """OpenWeatherMap precipitation tile — colored overlay, transparent where dry."""
+    if not OWM_KEY:
+        raise RuntimeError("OWM_API_KEY env variable not set")
+    url = (f"https://tile.openweathermap.org/map/precipitation_new"
+           f"/{z}/{x}/{y}.png?appid={OWM_KEY}")
     r = requests.get(url, headers=HEADERS, timeout=15)
-    if r.status_code == 200:
-        return Image.open(BytesIO(r.content)).convert("RGBA")
-    return None
+    r.raise_for_status()
+    return Image.open(BytesIO(r.content)).convert("RGBA")
 
 
 def build_tile_composite(tile_fn, z, cx, cy, radius):
@@ -92,20 +97,6 @@ def build_tile_composite(tile_fn, z, cx, cy, radius):
                 print(f"  tile ({cx+dx},{cy+dy}): {e}", file=sys.stderr)
             time.sleep(0.05)
     return canvas
-
-
-# ── RainViewer API ─────────────────────────────────────────────────────────────
-def get_rainviewer_frames():
-    """Return (past_frames, nowcast_frames) as lists of (path, timestamp)."""
-    r = requests.get(
-        "https://api.rainviewer.com/public/weather-maps.json",
-        headers=HEADERS, timeout=10
-    )
-    r.raise_for_status()
-    data = r.json()
-    past     = [(f["path"], f["time"]) for f in data.get("radar", {}).get("past", [])]
-    nowcast  = [(f["path"], f["time"]) for f in data.get("radar", {}).get("nowcast", [])]
-    return past, nowcast
 
 
 # ── Weather APIs ───────────────────────────────────────────────────────────────
@@ -146,13 +137,14 @@ def get_or_build_basemap(basemap_path, cx, cy):
     return canvas
 
 
-def composite_radar(basemap, radar_path, cx, cy):
-    radar_layer = build_tile_composite(
-        lambda z, x, y: fetch_radar_tile(radar_path, z, x, y),
+def composite_owm(basemap, cx, cy):
+    """Overlay OWM precipitation tiles on basemap."""
+    owm_layer = build_tile_composite(
+        lambda z, x, y: fetch_owm_tile(z, x, y),
         RADAR_ZOOM, cx, cy, TILE_RADIUS
     )
     frame = basemap.copy()
-    frame.alpha_composite(radar_layer)
+    frame.alpha_composite(owm_layer)
     return frame
 
 
@@ -187,11 +179,11 @@ def crop_annotate_save(frame, cx, cy, out_path, label=None, quality=82):
     # Timestamp label burned into image (bottom-left)
     if label:
         font = _load_font(10)
-        lw = len(label) * 6 + 4
-        draw.rectangle([(2, OUTPUT_H - 14), (2 + lw, OUTPUT_H - 2)], fill=(0, 0, 0))
-        draw.text((4, OUTPUT_H - 13), label, fill=(255, 230, 100), font=font)
+        lw = len(label) * 6 + 8
+        draw.rectangle([(2, OUTPUT_H - 16), (2 + lw, OUTPUT_H - 2)], fill=(0, 0, 0, 200))
+        draw.text((5, OUTPUT_H - 14), label, fill=(255, 230, 100), font=font)
 
-    rgb = Image.new("RGB", cropped.size, (12, 12, 22))
+    rgb = Image.new("RGB", cropped.size, (240, 240, 235))  # light background fill
     rgb.paste(cropped, mask=cropped.split()[3])
     rgb.save(out_path, "JPEG", quality=quality, optimize=True)
     return os.path.getsize(out_path)
@@ -234,20 +226,18 @@ def generate_forecast_image(hourly, cur_idx):
     img  = Image.new("RGB", (OUTPUT_W, OUTPUT_H), (12, 12, 22))
     draw = ImageDraw.Draw(img)
     f_sm = _load_font(10)
-    f_lg = _load_font(13)
 
     draw.text((8, 5), "6-HOUR RAIN FORECAST", fill=(110, 120, 200), font=f_sm)
     draw.line([(8, 19), (OUTPUT_W - 8, 19)], fill=(35, 35, 70), width=1)
 
     chart_left   = 8
-    chart_bottom = 165
+    chart_bottom = 175
     chart_top    = 28
-    chart_h      = chart_bottom - chart_top   # 137 px
+    chart_h      = chart_bottom - chart_top
 
-    bar_area_w = OUTPUT_W - 16               # 204 px
-    bar_w      = bar_area_w // 6             # 34 px
+    bar_area_w = OUTPUT_W - 16
+    bar_w      = bar_area_w // 6
 
-    # Grid lines at 25%, 50%, 75%
     for pct in [25, 50, 75]:
         gy = int(chart_bottom - pct / 100 * chart_h)
         draw.line([(chart_left, gy), (OUTPUT_W - 8, gy)], fill=(28, 28, 55), width=1)
@@ -263,11 +253,8 @@ def generate_forecast_image(hourly, cur_idx):
         if bar_h > 0:
             draw.rectangle([bx + 2, y_top, bx + bar_w - 2, chart_bottom], fill=color)
 
-        # Probability label above bar
         draw.text((bx + 2, max(y_top - 13, chart_top)), f"{prob}%",
                   fill=(215, 215, 215), font=f_sm)
-
-        # Hour label below chart
         draw.text((bx + 1, chart_bottom + 4), hlabel, fill=(90, 100, 160), font=f_sm)
 
     draw.text((8, OUTPUT_H - 13), "Open-Meteo NWP  \xb7  tap anywhere to close",
@@ -289,59 +276,28 @@ def main():
 
     # ── Base map ──────────────────────────────────────────────────────────────
     basemap_path = os.path.join(OUTPUT_DIR, f"basemap_z{RADAR_ZOOM}.png")
-    # Remove stale basemaps from other zoom levels
     for fname in os.listdir(OUTPUT_DIR):
         if fname.startswith("basemap") and fname != os.path.basename(basemap_path):
             os.remove(os.path.join(OUTPUT_DIR, fname))
             print(f"Removed old basemap: {fname}")
     basemap = get_or_build_basemap(basemap_path, cx, cy)
 
-    # ── RainViewer frames ─────────────────────────────────────────────────────
-    print("Fetching RainViewer metadata...")
-    past_frames, nowcast_frames = get_rainviewer_frames()
-
-    # Current radar (latest past frame)
-    radar_path, radar_ts = (past_frames[-1] if past_frames else (None, None))
-
-    print("Building current radar frame...")
-    if radar_path:
-        current_frame = composite_radar(basemap, radar_path, cx, cy)
-    else:
-        current_frame = basemap.copy()
-        print("  No radar data available.")
-        radar_ts = None
-
+    # ── Current radar frame (OWM precipitation overlay) ───────────────────────
+    print("Building radar frame (OpenWeatherMap precipitation)...")
+    current_frame = composite_owm(basemap, cx, cy)
     radar_out = os.path.join(OUTPUT_DIR, "radar.jpg")
     sz = crop_annotate_save(current_frame, cx, cy, radar_out)
     print(f"Radar saved ({sz // 1024} KB)")
 
-    # ── Animation frames ──────────────────────────────────────────────────────
-    # Remove old animation files
+    # ── Animation: single "now" frame + forecast chart ─────────────────────────
     for fname in os.listdir(OUTPUT_DIR):
         if fname.startswith("anim_") and fname.endswith(".jpg"):
             os.remove(os.path.join(OUTPUT_DIR, fname))
 
-    anim_sources = past_frames[-MAX_PAST_FRAMES:] + nowcast_frames
-    anim_sources = anim_sources[:MAX_TOTAL_FRAMES]
-    anim_labels  = []
-
-    print(f"Generating {len(anim_sources)} animation frames...")
-    for i, (path, ts) in enumerate(anim_sources):
-        delta = (ts - int(now.timestamp())) // 60
-        if delta < 0:
-            label = f"{delta}m"
-        elif delta == 0:
-            label = "now"
-        else:
-            label = f"+{delta}m"
-        anim_labels.append(label)
-
-        frame = composite_radar(basemap, path, cx, cy)
-        out   = os.path.join(OUTPUT_DIR, f"anim_{i:02d}.jpg")
-        sz    = crop_annotate_save(frame, cx, cy, out, label=label, quality=75)
-        print(f"  Frame {i} ({label}): {sz // 1024} KB")
-
-    anim_count = len(anim_sources)
+    anim_out = os.path.join(OUTPUT_DIR, "anim_00.jpg")
+    sz = crop_annotate_save(current_frame, cx, cy, anim_out, label="now", quality=75)
+    print(f"Animation frame (now): {sz // 1024} KB")
+    anim_count = 1
 
     # ── Weather data ──────────────────────────────────────────────────────────
     print("Fetching weather + METAR...")
@@ -353,7 +309,6 @@ def main():
     times   = hourly.get("time", [])
     probs   = hourly.get("precipitation_probability", [])
 
-    # Find index of current hour so rain_6h and the forecast chart agree
     current_hour_str = now.strftime("%Y-%m-%dT%H:00")
     cur_idx = 0
     for i, t in enumerate(times):
@@ -361,7 +316,6 @@ def main():
             cur_idx = i
             break
 
-    # Max probability over the next 6 full hours (H+1 … H+6), matches chart bars
     rain_6h = max(
         (probs[cur_idx + k] for k in range(1, 7) if cur_idx + k < len(probs)),
         default=0
@@ -375,7 +329,6 @@ def main():
         "metar_wspd":       metar.get("wspd"),
         "updated_at":       now.strftime("%H:%M"),
         "updated_epoch":    int(now.timestamp()),
-        "radar_ts":         radar_ts,
         "anim_count":       anim_count,
     }
     with open(os.path.join(OUTPUT_DIR, "data.json"), "w") as f:
@@ -386,8 +339,7 @@ def main():
 
     print(
         f"\nDone — Temp: {data['temperature']}°C  "
-        f"Hum: {data['humidity']}%  Rain(6h): {rain_6h}%  "
-        f"Anim frames: {anim_count}"
+        f"Hum: {data['humidity']}%  Rain(6h): {rain_6h}%"
     )
 
 

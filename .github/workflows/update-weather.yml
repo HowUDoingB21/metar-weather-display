@@ -32,6 +32,8 @@ jobs:
 
       - name: Generate weather data and radar image
         run: python backend/generate_data.py
+        env:
+          OWM_API_KEY: ${{ secrets.OWM_API_KEY }}
 
       - name: Commit and push updated files
         run: |
