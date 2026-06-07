@@ -1,0 +1,10 @@
+{
+  "temperature": null,
+  "humidity": null,
+  "rain_probability": 0,
+  "metar_wdir": null,
+  "metar_wspd": null,
+  "updated_at": "--:--",
+  "updated_epoch": 0,
+  "radar_ts": null
+}

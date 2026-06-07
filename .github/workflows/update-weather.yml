@@ -1,0 +1,44 @@
+name: Update Weather Data
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'   # every 10 minutes (GitHub minimum is 5, but 10 is more reliable)
+  workflow_dispatch:           # allow manual trigger from GitHub UI
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ hashFiles('backend/requirements.txt') }}
+          restore-keys: pip-
+
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Generate weather data and radar image
+        run: python backend/generate_data.py
+
+      - name: Commit and push updated files
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/
+          git diff --staged --quiet && echo "No changes." || (
+            git commit -m "chore: weather update $(date -u '+%H:%M UTC')" &&
+            git push
+          )
