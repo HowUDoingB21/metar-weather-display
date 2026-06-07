@@ -20,8 +20,8 @@ from PIL import Image, ImageDraw
 LAT          = 20.635617
 LON          = -103.405235
 TIMEZONE     = "America/Mexico_City"
-RADAR_ZOOM   = 8
-TILE_RADIUS  = 1        # 3×3 tile grid
+RADAR_ZOOM   = 12       # zoom 12 ≈ 35.7 m/px → 220×200 px covers ~7.85×7.14 km
+TILE_RADIUS  = 1        # 3×3 tile grid (768×768 composite, then crop to output size)
 OUTPUT_W     = 220      # radar image width (matches ESP32 panel)
 OUTPUT_H     = 200      # radar image height
 OUTPUT_DIR   = "docs"
@@ -188,8 +188,13 @@ def main():
     cx, cy = lat_lon_to_tile(LAT, LON, RADAR_ZOOM)
     print(f"Center tile ({cx},{cy}) zoom={RADAR_ZOOM}")
 
-    # Base map (cached in repo, refreshed monthly)
-    basemap_path = os.path.join(OUTPUT_DIR, "basemap.png")
+    # Base map (cached in repo, refreshed monthly; filename includes zoom so a zoom change forces rebuild)
+    basemap_path = os.path.join(OUTPUT_DIR, f"basemap_z{RADAR_ZOOM}.png")
+    # Remove stale basemap files from other zoom levels
+    for fname in os.listdir(OUTPUT_DIR):
+        if fname.startswith("basemap") and fname != os.path.basename(basemap_path):
+            os.remove(os.path.join(OUTPUT_DIR, fname))
+            print(f"Removed old basemap: {fname}")
     basemap = get_or_build_basemap(basemap_path, cx, cy)
 
     # Radar overlay
