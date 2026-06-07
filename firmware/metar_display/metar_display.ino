@@ -201,10 +201,10 @@ void drawPlayButton(bool highlight = false) {
     tft.setTextSize(1);
     tft.setTextColor(TFT_WHITE, bg);
     tft.setCursor(BTN_X + 10, BTN_Y + 6);
-    tft.print("> FORECAST");
+    tft.print("> 6H ANIM");
     tft.setCursor(BTN_X + 14, BTN_Y + 18);
     tft.setTextColor(highlight ? TFT_WHITE : 0x7BEF, bg);
-    tft.print("6h precip.");
+    tft.print("radar motion");
 }
 
 void drawInfoPanel(float temp, int hum, int rain) {
@@ -286,7 +286,23 @@ void updateDisplay() {
 
 // ── Animation playback ────────────────────────────────────────────────────────
 void playAnimation() {
+    if (g_animCount == 0) return;
     g_animating = true;
+
+    char url[100];
+    for (int i = 0; i < g_animCount; i++) {
+        tft.fillRect(0, 0, SCREEN_W, BAR_H, C_BAR_BG);
+        tft.setTextColor(TFT_WHITE, C_BAR_BG);
+        tft.setTextSize(1);
+        tft.setCursor(4, 6);
+        tft.printf("Motion  %d / %d", i + 1, g_animCount);
+
+        snprintf(url, sizeof(url),
+            "https://howudoingb21.github.io/metar-weather-display/anim_%02d.jpg", i);
+        size_t n = downloadToBuffer(url, jpegBuf, sizeof(jpegBuf));
+        if (n > 0) TJpgDec.drawJpg(RADAR_X, RADAR_Y, jpegBuf, n);
+        delay(300);
+    }
 
     // Show 6-hour forecast chart
     tft.fillRect(0, 0, SCREEN_W, BAR_H, C_BAR_BG);
