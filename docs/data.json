@@ -1,10 +1,10 @@
 {
-  "temperature": 18.3,
-  "humidity": 100,
+  "temperature": 18.2,
+  "humidity": 94,
   "rain_probability": 0,
   "metar_wdir": 210,
   "metar_wspd": 4,
-  "updated_at": "00:00",
-  "updated_epoch": 1787119219,
+  "updated_at": "01:01",
+  "updated_epoch": 1787122886,
   "anim_count": 1
 }
